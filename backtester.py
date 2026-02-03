@@ -1,4 +1,5 @@
 import logging
+import argparse
 
 import yfinance as yf
 import pandas as pd
@@ -113,8 +114,15 @@ def walidacja_krzyzowa(X, y, features, n_splits=5):
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
-    TICKER = 'CDR.WA'
-    KAPITAL_POCZATKOWY = 10000
+    parser = argparse.ArgumentParser(description='Backtester strategii ML na danych giełdowych.')
+    parser.add_argument('ticker', type=str, nargs='?', default='CDR.WA',
+                        help='Symbol giełdowy (np. CDR.WA, PKO.WA). Domyślnie: CDR.WA')
+    parser.add_argument('--kapital', type=float, default=10000,
+                        help='Kapitał początkowy w PLN. Domyślnie: 10000')
+    args = parser.parse_args()
+
+    TICKER = args.ticker
+    KAPITAL_POCZATKOWY = args.kapital
 
     # 1. Przygotowanie danych
     dane = prepare_data_for_ml(TICKER)
