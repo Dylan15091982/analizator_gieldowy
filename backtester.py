@@ -32,7 +32,7 @@ def prepare_data_for_ml(ticker, okres='10y'):
 
     # Definicja "Targetu"
     future_window = 30
-    target_percentage = 1.05
+    target_percentage = 1.03
     dane['Target'] = (dane['Close'].shift(-future_window) > dane['Close'] * target_percentage)
 
     # Ostateczne czyszczenie danych
@@ -99,7 +99,7 @@ def walidacja_krzyzowa(X, y, features, n_splits=5):
         X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
         y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-        model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+        model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, class_weight='balanced')
         model.fit(X_train, y_train)
         score = model.score(X_test, y_test)
         wyniki.append(score)
@@ -130,7 +130,7 @@ def main():
         logger.error("Nie udało się przygotować danych.")
         return
 
-    features = ['RSI', 'SMA_diff', 'MACD_diff', 'Volatility', 'BB_Upper', 'BB_Lower', 'Returns']
+    features = ['RSI', 'SMA_diff', 'MACD_diff', 'Volatility', 'BB_Position', 'SMA50_dist', 'SMA200_dist', 'ROC_10', 'ROC_30', 'Returns']
     X = dane[features]
     y = dane['Target']
 
@@ -150,14 +150,15 @@ def main():
 
     # 4. Trening modelu
     logger.info("Trening modelu RandomForest...")
-    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, class_weight='balanced')
     model.fit(X_train, y_train)
 
     # 5. Predykcja i metryki
-    predykcje = model.predict(X_test)
+    proba = model.predict_proba(X_test)[:, 1]
+    predykcje = (proba >= 0.4).astype(int)
 
     logger.info("\n--- Metryki klasyfikacji ---")
-    logger.info("\n%s", classification_report(y_test, predykcje, target_names=['Spadek', 'Wzrost']))
+    logger.info("\n%s", classification_report(y_test, predykcje, target_names=['Spadek', 'Wzrost'], zero_division=0))
     logger.info("Macierz pomyłek:\n%s", confusion_matrix(y_test, predykcje))
 
     # 6. Ważność cech

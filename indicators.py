@@ -46,4 +46,13 @@ def dodaj_wszystkie_wskazniki(data):
     data['SMA_diff'] = data['SMA50'] - data['SMA200']
     data['MACD_diff'] = data['MACD'] - data['Signal_Line']
     data['BB_Mid'], data['BB_Upper'], data['BB_Lower'] = oblicz_bollinger(data)
+
+    # Cechy relatywne
+    bb_range = data['BB_Upper'] - data['BB_Lower']
+    data['BB_Position'] = (data['Close'] - data['BB_Lower']) / bb_range.replace(0, float('nan'))
+    data['SMA50_dist'] = (data['Close'] - data['SMA50']) / data['SMA50']
+    data['SMA200_dist'] = (data['Close'] - data['SMA200']) / data['SMA200']
+    data['ROC_10'] = data['Close'].pct_change(periods=10)
+    data['ROC_30'] = data['Close'].pct_change(periods=30)
+
     return data
