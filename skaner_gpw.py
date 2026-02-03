@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 import yfinance as yf
+import pandas as pd
 import time
 from indicators import oblicz_sma, oblicz_rsi
 
@@ -25,6 +26,8 @@ def analizuj_spolki(tickers):
     for ticker in tickers:
         try:
             data = yf.download(ticker, period='1y', progress=False, auto_adjust=True)
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
 
             if len(data) < 200:
                 logger.debug("Za mało danych dla %s (%d dni), pomijam.", ticker, len(data))

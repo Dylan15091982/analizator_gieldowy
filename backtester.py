@@ -1,6 +1,7 @@
 import logging
 
 import yfinance as yf
+import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import TimeSeriesSplit
@@ -22,6 +23,8 @@ def prepare_data_for_ml(ticker, okres='10y'):
     dane = yf.download(ticker, period=okres, auto_adjust=True)
     if dane.empty:
         return None
+    if isinstance(dane.columns, pd.MultiIndex):
+        dane.columns = dane.columns.get_level_values(0)
 
     # Oblicz wskaźniki za pomocą wspólnego modułu
     dane = dodaj_wszystkie_wskazniki(dane)

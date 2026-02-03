@@ -3,6 +3,7 @@ import os
 import argparse
 
 import yfinance as yf
+import pandas as pd
 import matplotlib.pyplot as plt
 from indicators import dodaj_wszystkie_wskazniki
 
@@ -17,6 +18,9 @@ def pobierz_dane(ticker, period):
         if data.empty:
             logger.warning("Nie znaleziono danych dla symbolu: %s.", ticker)
             return None
+        # Spłaszcz MultiIndex kolumn (yfinance zwraca je dla pojedynczego tickera)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
         logger.info("Dane zostały pomyślnie pobrane.")
         return data
     except Exception as e:
