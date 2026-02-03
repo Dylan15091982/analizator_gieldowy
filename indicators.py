@@ -26,6 +26,15 @@ def oblicz_macd(data, span_short=12, span_long=26, span_signal=9):
     return macd, signal_line
 
 
+def oblicz_bollinger(data, window=20, num_std=2):
+    """Oblicza wstęgi Bollingera."""
+    sma = data['Close'].rolling(window=window).mean()
+    std = data['Close'].rolling(window=window).std()
+    upper = sma + num_std * std
+    lower = sma - num_std * std
+    return sma, upper, lower
+
+
 def dodaj_wszystkie_wskazniki(data):
     """Dodaje wszystkie wskaźniki techniczne do ramki danych."""
     data['SMA50'] = oblicz_sma(data, 50)
@@ -36,4 +45,5 @@ def dodaj_wszystkie_wskazniki(data):
     data['Volatility'] = data['Returns'].rolling(window=20).std()
     data['SMA_diff'] = data['SMA50'] - data['SMA200']
     data['MACD_diff'] = data['MACD'] - data['Signal_Line']
+    data['BB_Mid'], data['BB_Upper'], data['BB_Lower'] = oblicz_bollinger(data)
     return data
