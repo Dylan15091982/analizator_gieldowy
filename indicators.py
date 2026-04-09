@@ -2,6 +2,8 @@
 
 import pandas as pd
 
+WYMAGANE_KOLUMNY = {'Close', 'Open', 'Volume'}
+
 
 def oblicz_sma(data, window):
     """Oblicza prostą średnią kroczącą (SMA) dla kolumny 'Close'."""
@@ -36,7 +38,19 @@ def oblicz_bollinger(data, window=20, num_std=2):
 
 
 def dodaj_wszystkie_wskazniki(data):
-    """Dodaje wszystkie wskaźniki techniczne do ramki danych."""
+    """Dodaje wszystkie wskaźniki techniczne do ramki danych.
+
+    Raises:
+        ValueError: Jeśli brakuje wymaganych kolumn w danych.
+        TypeError: Jeśli dane nie są typu pandas DataFrame.
+    """
+    if not isinstance(data, pd.DataFrame):
+        raise TypeError("Dane muszą być typu pandas DataFrame.")
+    brakujace = WYMAGANE_KOLUMNY - set(data.columns)
+    if brakujace:
+        raise ValueError(f"Brakujące kolumny w danych: {', '.join(sorted(brakujace))}")
+    if data.empty:
+        raise ValueError("Dane wejściowe są puste.")
     data['SMA50'] = oblicz_sma(data, 50)
     data['SMA200'] = oblicz_sma(data, 200)
     data['RSI'] = oblicz_rsi(data)

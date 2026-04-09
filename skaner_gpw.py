@@ -1,4 +1,5 @@
 import logging
+import sys
 import csv
 import os
 from datetime import datetime
@@ -16,7 +17,12 @@ def analizuj_spolki(tickers):
     Skanuje podane tickery w poszukiwaniu sygnałów transakcyjnych:
     - Złoty krzyż / Krzyż śmierci
     - Poziomy RSI (wykupienie/wyprzedanie)
+
+    Raises:
+        ValueError: Jeśli lista tickerów jest pusta.
     """
+    if not tickers:
+        raise ValueError("Lista tickerów nie może być pusta.")
     logger.info("Skanowanie rynku w poszukiwaniu sygnałów transakcyjnych...")
     sygnaly_kupna = []
     sygnaly_sprzedazy = []
@@ -74,18 +80,23 @@ def zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolk
     script_dir = os.path.dirname(os.path.abspath(__file__))
     nazwa_pliku = os.path.join(script_dir, f'skan_{data_skanowania}.csv')
 
-    with open(nazwa_pliku, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Data skanowania', 'Typ sygnału', 'Ticker', 'RSI'])
+    try:
+        with open(nazwa_pliku, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Data skanowania', 'Typ sygnału', 'Ticker', 'RSI'])
 
-        for ticker in sygnaly_kupna:
-            writer.writerow([data_skanowania, 'Złoty Krzyż (KUPNO)', ticker, ''])
-        for ticker in sygnaly_sprzedazy:
-            writer.writerow([data_skanowania, 'Krzyż Śmierci (SPRZEDAŻ)', ticker, ''])
-        for s in spolki_wyprzedane:
-            writer.writerow([data_skanowania, 'Wyprzedana (RSI<30)', s['ticker'], f"{s['rsi']:.2f}"])
-        for s in spolki_wykupione:
-            writer.writerow([data_skanowania, 'Wykupiona (RSI>70)', s['ticker'], f"{s['rsi']:.2f}"])
+            for ticker in sygnaly_kupna:
+                writer.writerow([data_skanowania, 'Złoty Krzyż (KUPNO)', ticker, ''])
+            for ticker in sygnaly_sprzedazy:
+                writer.writerow([data_skanowania, 'Krzyż Śmierci (SPRZEDAŻ)', ticker, ''])
+            for s in spolki_wyprzedane:
+                writer.writerow([data_skanowania, 'Wyprzedana (RSI<30)', s['ticker'], f"{s['rsi']:.2f}"])
+            for s in spolki_wykupione:
+                writer.writerow([data_skanowania, 'Wykupiona (RSI>70)', s['ticker'], f"{s['rsi']:.2f}"])
+
+    except OSError as e:
+        logger.error("Nie udało się zapisać wyników do pliku %s: %s", nazwa_pliku, e)
+        return None
 
     logger.info("Wyniki zapisano do: %s", nazwa_pliku)
     return nazwa_pliku
@@ -103,10 +114,16 @@ def main():
 
     logger.info("Rozpoczynam analizę dla %d spółek z indeksu WIG20.", len(lista_tickerow_wig20))
 
-    sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione = analizuj_spolki(lista_tickerow_wig20)
+    try:
+        sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione = analizuj_spolki(lista_tickerow_wig20)
+    except ValueError as e:
+        logger.error("Błąd podczas analizy spółek: %s", e)
+        sys.exit(1)
 
     # Zapis do CSV
-    zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione)
+    plik_csv = zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione)
+    if plik_csv is None:
+        logger.warning("Nie udało się zapisać wyników do CSV, kontynuuję wyświetlanie.")
 
     # Podsumowanie na konsoli
     logger.info("\n--- Podsumowanie ---")

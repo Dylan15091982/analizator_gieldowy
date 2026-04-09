@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import argparse
 
 import yfinance as yf
@@ -7,11 +8,22 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from indicators import dodaj_wszystkie_wskazniki
 
+DOPUSZCZALNE_OKRESY = {'1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'}
+
 logger = logging.getLogger(__name__)
 
 
 def pobierz_dane(ticker, period):
     """Pobiera dane historyczne dla danego symbolu i okresu, z obsługą błędów."""
+    if not ticker or not ticker.strip():
+        logger.error("Symbol tickera nie może być pusty.")
+        return None
+    if period not in DOPUSZCZALNE_OKRESY:
+        logger.error(
+            "Nieprawidłowy okres '%s'. Dopuszczalne wartości: %s",
+            period, ', '.join(sorted(DOPUSZCZALNE_OKRESY)),
+        )
+        return None
     logger.info("Pobieranie danych dla symbolu: %s za okres: %s...", ticker, period)
     try:
         data = yf.download(ticker, period=period)
@@ -30,6 +42,11 @@ def pobierz_dane(ticker, period):
 
 def stworz_wykres(data, ticker, output_filename):
     """Generuje wielopanelowy wykres analizy technicznej z RSI, MACD, Bollinger Bands i wolumenem."""
+    wymagane = ['Close', 'Open', 'Volume', 'SMA50', 'SMA200', 'BB_Upper', 'BB_Lower', 'RSI', 'MACD', 'Signal_Line']
+    brakujace = [col for col in wymagane if col not in data.columns]
+    if brakujace:
+        logger.error("Brak wymaganych kolumn do wygenerowania wykresu: %s", ', '.join(brakujace))
+        return
     logger.info("Generowanie wykresu...")
     plt.style.use('seaborn-v0_8-darkgrid')
 
@@ -100,7 +117,7 @@ def main():
     parser.add_argument('--period', type=str, default='5y',
                         help='Okres pobierania danych (np. 1y, 5y, 10y, max). Domyślnie: 5y')
     parser.add_argument('--output', type=str,
-                        help='Nazwa pliku wyjściowego z wykresem (np. moja_analiza.png). Domyślnie: <TICKER>_stock_analysis.png')
+                        help='Nazwa pliku wyjściowego z wykresem. Domyślnie: <TICKER>_stock_analysis.png')
 
     args = parser.parse_args()
 
@@ -109,9 +126,17 @@ def main():
     output_filename = args.output if args.output else f'{ticker}_stock_analysis.png'
 
     dane = pobierz_dane(ticker, period)
-    if dane is not None:
+    if dane is None:
+        logger.error("Nie udało się pobrać danych dla %s. Przerywam.", ticker)
+        sys.exit(1)
+
+    try:
         dane = dodaj_wszystkie_wskazniki(dane)
-        stworz_wykres(dane, ticker, output_filename)
+    except (ValueError, TypeError) as e:
+        logger.error("Błąd podczas obliczania wskaźników: %s", e)
+        sys.exit(1)
+
+    stworz_wykres(dane, ticker, output_filename)
 
 
 if __name__ == "__main__":

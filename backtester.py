@@ -1,4 +1,5 @@
 import logging
+import sys
 import argparse
 
 import yfinance as yf
@@ -16,19 +17,32 @@ PROWIZJA = 0.003  # 0.3% prowizji za transakcję
 
 # --- Logika Przygotowania Danych i Wskaźników ---
 
+
 def prepare_data_for_ml(ticker, okres='10y'):
     """
     Pobiera i przygotowuje dane, zwracając kompletną ramkę danych z cechami i celem.
     """
+    if not ticker or not ticker.strip():
+        logger.error("Symbol tickera nie może być pusty.")
+        return None
     logger.info("Pobieranie danych i przygotowywanie dla %s...", ticker)
-    dane = yf.download(ticker, period=okres, auto_adjust=True)
+    try:
+        dane = yf.download(ticker, period=okres, auto_adjust=True)
+    except Exception as e:
+        logger.error("Błąd podczas pobierania danych dla %s: %s", ticker, e)
+        return None
     if dane.empty:
+        logger.warning("Nie znaleziono danych dla symbolu: %s.", ticker)
         return None
     if isinstance(dane.columns, pd.MultiIndex):
         dane.columns = dane.columns.get_level_values(0)
 
     # Oblicz wskaźniki za pomocą wspólnego modułu
-    dane = dodaj_wszystkie_wskazniki(dane)
+    try:
+        dane = dodaj_wszystkie_wskazniki(dane)
+    except (ValueError, TypeError) as e:
+        logger.error("Błąd podczas obliczania wskaźników: %s", e)
+        return None
 
     # Definicja "Targetu"
     future_window = 30
@@ -42,6 +56,7 @@ def prepare_data_for_ml(ticker, okres='10y'):
     return dane_finalne
 
 # --- Logika Backtestera ---
+
 
 def _jako_float(wartosc):
     """Konwertuje wartość pandas/numpy na zwykły float Pythona."""
@@ -124,13 +139,20 @@ def main():
     TICKER = args.ticker
     KAPITAL_POCZATKOWY = args.kapital
 
+    if KAPITAL_POCZATKOWY <= 0:
+        logger.error("Kapitał początkowy musi być wartością dodatnią (podano: %.2f).", KAPITAL_POCZATKOWY)
+        sys.exit(1)
+
     # 1. Przygotowanie danych
     dane = prepare_data_for_ml(TICKER)
     if dane is None or dane.empty:
-        logger.error("Nie udało się przygotować danych.")
-        return
+        logger.error("Nie udało się przygotować danych dla %s. Przerywam.", TICKER)
+        sys.exit(1)
 
-    features = ['RSI', 'SMA_diff', 'MACD_diff', 'Volatility', 'BB_Position', 'SMA50_dist', 'SMA200_dist', 'ROC_10', 'ROC_30', 'Returns']
+    features = [
+        'RSI', 'SMA_diff', 'MACD_diff', 'Volatility', 'BB_Position',
+        'SMA50_dist', 'SMA200_dist', 'ROC_10', 'ROC_30', 'Returns',
+    ]
     X = dane[features]
     y = dane['Target']
 
@@ -150,12 +172,20 @@ def main():
 
     # 4. Trening modelu
     logger.info("Trening modelu RandomForest...")
-    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, class_weight='balanced')
-    model.fit(X_train, y_train)
+    try:
+        model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, class_weight='balanced')
+        model.fit(X_train, y_train)
+    except Exception as e:
+        logger.error("Błąd podczas trenowania modelu: %s", e)
+        sys.exit(1)
 
     # 5. Predykcja i metryki
-    proba = model.predict_proba(X_test)[:, 1]
-    predykcje = (proba >= 0.4).astype(int)
+    try:
+        proba = model.predict_proba(X_test)[:, 1]
+        predykcje = (proba >= 0.4).astype(int)
+    except Exception as e:
+        logger.error("Błąd podczas predykcji: %s", e)
+        sys.exit(1)
 
     logger.info("\n--- Metryki klasyfikacji ---")
     logger.info("\n%s", classification_report(y_test, predykcje, target_names=['Spadek', 'Wzrost'], zero_division=0))
