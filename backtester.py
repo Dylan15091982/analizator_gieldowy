@@ -1,4 +1,5 @@
 import logging
+import re
 import argparse
 
 import yfinance as yf
@@ -122,6 +123,10 @@ def main():
     args = parser.parse_args()
 
     TICKER = args.ticker
+    if not re.match(r'^[A-Za-z0-9._^-]{1,20}$', TICKER):
+        logger.error("Nieprawidlowy symbol gieldowy: %s. Dozwolone znaki: litery, cyfry, '.', '_', '^', '-'.", TICKER)
+        return
+
     KAPITAL_POCZATKOWY = args.kapital
 
     # 1. Przygotowanie danych

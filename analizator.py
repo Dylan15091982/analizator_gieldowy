@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import argparse
 
 import yfinance as yf
@@ -84,7 +85,10 @@ def stworz_wykres(data, ticker, output_filename):
     plt.tight_layout()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    output_path = os.path.join(script_dir, output_filename)
+    safe_filename = os.path.basename(output_filename)
+    if not safe_filename.lower().endswith('.png'):
+        safe_filename += '.png'
+    output_path = os.path.join(script_dir, safe_filename)
 
     plt.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -105,6 +109,10 @@ def main():
     args = parser.parse_args()
 
     ticker = args.ticker
+    if not re.match(r'^[A-Za-z0-9._^-]{1,20}$', ticker):
+        logger.error("Nieprawidlowy symbol gieldowy: %s. Dozwolone znaki: litery, cyfry, '.', '_', '^', '-'.", ticker)
+        return
+
     period = args.period
     output_filename = args.output if args.output else f'{ticker}_stock_analysis.png'
 
