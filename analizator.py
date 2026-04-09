@@ -1,11 +1,14 @@
 import logging
 import os
+import re
 import argparse
 
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 from indicators import dodaj_wszystkie_wskazniki
+
+TICKER_PATTERN = re.compile(r'^[A-Za-z0-9._^=-]{1,20}$')
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +108,20 @@ def main():
     args = parser.parse_args()
 
     ticker = args.ticker
+    if not TICKER_PATTERN.match(ticker):
+        logger.error("Nieprawidłowy symbol giełdowy: %s. Dozwolone znaki: litery, cyfry, . _ ^ = -", ticker)
+        return
+
     period = args.period
-    output_filename = args.output if args.output else f'{ticker}_stock_analysis.png'
+    raw_output = args.output if args.output else f'{ticker}_stock_analysis.png'
+    # Zabezpieczenie przed path traversal: usuwamy komponenty ścieżki
+    output_filename = os.path.basename(raw_output)
+    if not output_filename or output_filename != raw_output.replace(os.sep, ''):
+        logger.error(
+            "Nazwa pliku wyjściowego nie może zawierać separatorów ścieżki: %s",
+            raw_output,
+        )
+        return
 
     dane = pobierz_dane(ticker, period)
     if dane is not None:
