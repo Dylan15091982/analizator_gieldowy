@@ -42,7 +42,7 @@ def analizuj_spolki(tickers):
                 bledy.append({'ticker': ticker, 'error': 'Brak danych z yfinance'})
                 continue
 
-            if len(data) < 200:
+            if len(data) < 205:
                 logger.debug("Za mało danych dla %s (%d dni), pomijam.", ticker, len(data))
                 continue
 
@@ -57,6 +57,8 @@ def analizuj_spolki(tickers):
             ostatnie_dni = data.tail(5)
             if len(ostatnie_dni) < 5:
                 logger.debug("Za mało ostatnich dni dla %s, pomijam sygnały SMA.", ticker)
+            elif pd.isna(ostatnie_dni['SMA50'].iloc[-5]) or pd.isna(ostatnie_dni['SMA200'].iloc[-5]):
+                logger.debug("SMA zawiera NaN dla %s, pomijam sygnały SMA.", ticker)
             else:
                 if (ostatnie_dni['SMA50'] > ostatnie_dni['SMA200']).any() and \
                    (ostatnie_dni['SMA50'].iloc[-5] < ostatnie_dni['SMA200'].iloc[-5]):
