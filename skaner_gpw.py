@@ -16,12 +16,20 @@ def analizuj_spolki(tickers):
     Skanuje podane tickery w poszukiwaniu sygnałów transakcyjnych:
     - Złoty krzyż / Krzyż śmierci
     - Poziomy RSI (wykupienie/wyprzedanie)
+
+    Zwraca krotkę: (sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy)
+    gdzie bledy to lista słowników {'ticker': ..., 'error': ...}.
     """
     logger.info("Skanowanie rynku w poszukiwaniu sygnałów transakcyjnych...")
     sygnaly_kupna = []
     sygnaly_sprzedazy = []
     spolki_wyprzedane = []
     spolki_wykupione = []
+    bledy = []
+
+    if not tickers:
+        logger.warning("Lista tickerów jest pusta — nie ma nic do przeskanowania.")
+        return sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy
 
     for ticker in tickers:
         try:
@@ -29,7 +37,12 @@ def analizuj_spolki(tickers):
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
 
-            if len(data) < 200:
+            if data.empty:
+                logger.warning("Brak danych dla %s, pomijam.", ticker)
+                bledy.append({'ticker': ticker, 'error': 'Brak danych z yfinance'})
+                continue
+
+            if len(data) < 205:
                 logger.debug("Za mało danych dla %s (%d dni), pomijam.", ticker, len(data))
                 continue
 
@@ -42,18 +55,25 @@ def analizuj_spolki(tickers):
 
             # 1. Sygnały przecięcia średnich
             ostatnie_dni = data.tail(5)
-            if (ostatnie_dni['SMA50'] > ostatnie_dni['SMA200']).any() and \
-               (ostatnie_dni['SMA50'].iloc[-5] < ostatnie_dni['SMA200'].iloc[-5]):
-                logger.info("  -> Sygnał KUPNA (Złoty Krzyż) dla: %s", ticker)
-                sygnaly_kupna.append(ticker)
-            elif (ostatnie_dni['SMA50'] < ostatnie_dni['SMA200']).any() and \
-                 (ostatnie_dni['SMA50'].iloc[-5] > ostatnie_dni['SMA200'].iloc[-5]):
-                logger.info("  -> Sygnał SPRZEDAŻY (Krzyż Śmierci) dla: %s", ticker)
-                sygnaly_sprzedazy.append(ticker)
+            if len(ostatnie_dni) < 5:
+                logger.debug("Za mało ostatnich dni dla %s, pomijam sygnały SMA.", ticker)
+            elif pd.isna(ostatnie_dni['SMA50'].iloc[-5]) or pd.isna(ostatnie_dni['SMA200'].iloc[-5]):
+                logger.debug("SMA zawiera NaN dla %s, pomijam sygnały SMA.", ticker)
+            else:
+                if (ostatnie_dni['SMA50'] > ostatnie_dni['SMA200']).any() and \
+                   (ostatnie_dni['SMA50'].iloc[-5] < ostatnie_dni['SMA200'].iloc[-5]):
+                    logger.info("  -> Sygnał KUPNA (Złoty Krzyż) dla: %s", ticker)
+                    sygnaly_kupna.append(ticker)
+                elif (ostatnie_dni['SMA50'] < ostatnie_dni['SMA200']).any() and \
+                     (ostatnie_dni['SMA50'].iloc[-5] > ostatnie_dni['SMA200'].iloc[-5]):
+                    logger.info("  -> Sygnał SPRZEDAŻY (Krzyż Śmierci) dla: %s", ticker)
+                    sygnaly_sprzedazy.append(ticker)
 
             # 2. Sygnały RSI
             ostatni_rsi = data['RSI'].iloc[-1]
-            if ostatni_rsi < 30:
+            if pd.isna(ostatni_rsi):
+                logger.debug("RSI jest NaN dla %s, pomijam.", ticker)
+            elif ostatni_rsi < 30:
                 logger.info("  -> Spółka WYPRZEDANA (RSI=%.2f) dla: %s", ostatni_rsi, ticker)
                 spolki_wyprzedane.append({'ticker': ticker, 'rsi': float(ostatni_rsi)})
             elif ostatni_rsi > 70:
@@ -64,31 +84,39 @@ def analizuj_spolki(tickers):
 
         except Exception as e:
             logger.warning("Błąd podczas analizy %s: %s", ticker, e)
+            bledy.append({'ticker': ticker, 'error': str(e)})
 
-    return sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione
+    return sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy
 
 
-def zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione):
-    """Zapisuje wyniki skanowania do pliku CSV z datą."""
+def zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy=None):
+    """Zapisuje wyniki skanowania (w tym błędy) do pliku CSV z datą."""
     data_skanowania = datetime.now().strftime('%Y-%m-%d_%H%M')
     script_dir = os.path.dirname(os.path.abspath(__file__))
     nazwa_pliku = os.path.join(script_dir, f'skan_{data_skanowania}.csv')
 
-    with open(nazwa_pliku, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Data skanowania', 'Typ sygnału', 'Ticker', 'RSI'])
+    try:
+        with open(nazwa_pliku, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Data skanowania', 'Typ sygnału', 'Ticker', 'RSI'])
 
-        for ticker in sygnaly_kupna:
-            writer.writerow([data_skanowania, 'Złoty Krzyż (KUPNO)', ticker, ''])
-        for ticker in sygnaly_sprzedazy:
-            writer.writerow([data_skanowania, 'Krzyż Śmierci (SPRZEDAŻ)', ticker, ''])
-        for s in spolki_wyprzedane:
-            writer.writerow([data_skanowania, 'Wyprzedana (RSI<30)', s['ticker'], f"{s['rsi']:.2f}"])
-        for s in spolki_wykupione:
-            writer.writerow([data_skanowania, 'Wykupiona (RSI>70)', s['ticker'], f"{s['rsi']:.2f}"])
+            for ticker in sygnaly_kupna:
+                writer.writerow([data_skanowania, 'Złoty Krzyż (KUPNO)', ticker, ''])
+            for ticker in sygnaly_sprzedazy:
+                writer.writerow([data_skanowania, 'Krzyż Śmierci (SPRZEDAŻ)', ticker, ''])
+            for s in spolki_wyprzedane:
+                writer.writerow([data_skanowania, 'Wyprzedana (RSI<30)', s['ticker'], f"{s['rsi']:.2f}"])
+            for s in spolki_wykupione:
+                writer.writerow([data_skanowania, 'Wykupiona (RSI>70)', s['ticker'], f"{s['rsi']:.2f}"])
+            for b in (bledy or []):
+                writer.writerow([data_skanowania, f"BŁĄD: {b['error']}", b['ticker'], ''])
 
-    logger.info("Wyniki zapisano do: %s", nazwa_pliku)
-    return nazwa_pliku
+        logger.info("Wyniki zapisano do: %s", nazwa_pliku)
+        return nazwa_pliku
+
+    except OSError as e:
+        logger.error("Nie udało się zapisać wyników do CSV: %s", e)
+        return None
 
 
 def main():
@@ -103,13 +131,24 @@ def main():
 
     logger.info("Rozpoczynam analizę dla %d spółek z indeksu WIG20.", len(lista_tickerow_wig20))
 
-    sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione = analizuj_spolki(lista_tickerow_wig20)
+    try:
+        sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy = analizuj_spolki(
+            lista_tickerow_wig20
+        )
+    except Exception as e:
+        logger.critical("Nieoczekiwany błąd podczas skanowania: %s", e)
+        return
 
     # Zapis do CSV
-    zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione)
+    zapisz_wyniki_csv(sygnaly_kupna, sygnaly_sprzedazy, spolki_wyprzedane, spolki_wykupione, bledy)
 
     # Podsumowanie na konsoli
     logger.info("\n--- Podsumowanie ---")
+
+    if bledy:
+        logger.warning("Błędy podczas skanowania (%d):", len(bledy))
+        for b in bledy:
+            logger.warning("- %s: %s", b['ticker'], b['error'])
 
     if spolki_wyprzedane:
         logger.info("Spółki potencjalnie WYPRZEDANE (RSI < 30):")
