@@ -1,4 +1,5 @@
 import logging
+import re
 import argparse
 
 import yfinance as yf
@@ -9,6 +10,8 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import classification_report, confusion_matrix
 
 from indicators import dodaj_wszystkie_wskazniki
+
+TICKER_PATTERN = re.compile(r'^[A-Za-z0-9._^=-]{1,20}$')
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +125,10 @@ def main():
     args = parser.parse_args()
 
     TICKER = args.ticker
+    if not TICKER_PATTERN.match(TICKER):
+        logger.error("Nieprawidłowy symbol giełdowy: %s. Dozwolone znaki: litery, cyfry, . _ ^ = -", TICKER)
+        return
+
     KAPITAL_POCZATKOWY = args.kapital
 
     # 1. Przygotowanie danych
